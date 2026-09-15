@@ -172,6 +172,14 @@
       .touch-pad.move { left: max(10px, env(safe-area-inset-left)); }
       .touch-pad.fire { right: max(10px, env(safe-area-inset-right)); }
     }
+
+    /* Keep controls clear of oversized mobile browser toolbars in landscape. */
+    @media (pointer: coarse) and (max-height: 600px),
+           (hover: none) and (max-height: 600px) {
+      .touch-pad {
+        bottom: max(80px, env(safe-area-inset-bottom));
+      }
+    }
   </style>
 </head>
 <body>
