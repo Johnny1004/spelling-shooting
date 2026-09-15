@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Word Shooting Plane Game</title>
   <style>
     html, body {
@@ -10,6 +11,12 @@
       overflow: hidden;
       background: #000;
       font-family: Arial, sans-serif;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     #gameCanvas {
@@ -85,6 +92,80 @@
     }
 
     .btn:hover { filter: brightness(1.1); }
+
+    #touch-controls {
+      position: absolute;
+      inset: 0;
+      display: none;
+      pointer-events: none;
+    }
+
+    .touch-pad {
+      position: absolute;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      display: flex;
+      gap: 14px;
+      pointer-events: auto;
+    }
+
+    .touch-pad.move { left: max(18px, env(safe-area-inset-left)); }
+    .touch-pad.fire { right: max(18px, env(safe-area-inset-right)); }
+
+    .touch-btn {
+      width: 76px;
+      height: 76px;
+      border: 3px solid rgba(255,255,255,0.9);
+      border-radius: 50%;
+      background: rgba(16, 38, 74, 0.68);
+      color: #fff;
+      font-size: 34px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.45);
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .touch-btn.shoot {
+      width: 92px;
+      height: 92px;
+      background: rgba(210, 42, 42, 0.78);
+      font-size: 17px;
+      letter-spacing: 0.5px;
+    }
+
+    .touch-btn.active,
+    .touch-btn:active {
+      transform: scale(0.93);
+      filter: brightness(1.25);
+    }
+
+    @media (pointer: coarse), (hover: none) {
+      body.game-active #touch-controls { display: block; }
+      #start-screen p .desktop-help { display: none; }
+      #start-screen p .touch-help { display: inline; }
+    }
+
+    @media (pointer: fine) and (hover: hover) {
+      #start-screen p .touch-help { display: none; }
+    }
+
+    @media (max-width: 700px), (max-height: 500px) {
+      .top-bar { top: 6px; }
+      .score { font-size: 21px; }
+      .life-icon { width: 30px; height: 23px; }
+      #start-screen h1, #gameover-screen h1 {
+        margin: 0;
+        font-size: clamp(26px, 7vw, 42px);
+        text-align: center;
+      }
+      #start-screen p { margin: 2px 12px 8px; text-align: center; }
+      .touch-btn { width: 62px; height: 62px; font-size: 28px; }
+      .touch-btn.shoot { width: 74px; height: 74px; font-size: 14px; }
+      .touch-pad { bottom: max(10px, env(safe-area-inset-bottom)); gap: 9px; }
+      .touch-pad.move { left: max(10px, env(safe-area-inset-left)); }
+      .touch-pad.fire { right: max(10px, env(safe-area-inset-right)); }
+    }
   </style>
 </head>
 <body>
@@ -99,7 +180,10 @@
 
     <div id="start-screen">
       <h1>Word Shooting Plane</h1>
-      <p>Use ↑ and ↓ to move. Press SPACE to shoot.</p>
+      <p>
+        <span class="desktop-help">Use ↑ and ↓ to move. Press SPACE to shoot.</span>
+        <span class="touch-help">Use ▲ and ▼ to move. Tap SHOOT to fire.</span>
+      </p>
       <button class="btn" id="start-btn">START</button>
     </div>
 
@@ -107,6 +191,16 @@
       <h1>GAME OVER</h1>
       <div id="final-score"></div>
       <button class="btn" id="restart-btn">PLAY AGAIN</button>
+    </div>
+
+    <div id="touch-controls" aria-label="Touch game controls">
+      <div class="touch-pad move">
+        <button class="touch-btn" id="touch-up" aria-label="Move up">▲</button>
+        <button class="touch-btn" id="touch-down" aria-label="Move down">▼</button>
+      </div>
+      <div class="touch-pad fire">
+        <button class="touch-btn shoot" id="touch-shoot" aria-label="Shoot">SHOOT</button>
+      </div>
     </div>
   </div>
 
@@ -142,6 +236,8 @@
       canvasHeight = window.innerHeight;
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
+      updateResponsiveSizes();
+      keepPlaneOnScreen();
     });
 
     // ---------------- WORD LISTS ----------------
@@ -510,6 +606,27 @@ travell
       speed: 6
     };
 
+    function updateResponsiveSizes() {
+      const scale = Math.min(1, Math.max(0.55, canvasWidth / 900));
+      plane.width = PLANE_WIDTH * scale;
+      plane.height = PLANE_HEIGHT * scale;
+      plane.x = Math.max(35, Math.min(120, canvasWidth * 0.08));
+      plane.speed = Math.max(5, 6 * scale);
+    }
+
+    function keepPlaneOnScreen() {
+      const topLimit = canvasHeight < 500 ? 38 : 50;
+      const bottomSpace = isTouchDevice() ? Math.min(105, canvasHeight * 0.22) : 30;
+      plane.y = Math.max(topLimit, Math.min(plane.y, canvasHeight - bottomSpace - plane.height));
+    }
+
+    function isTouchDevice() {
+      return window.matchMedia("(pointer: coarse), (hover: none)").matches || navigator.maxTouchPoints > 0;
+    }
+
+    updateResponsiveSizes();
+    keepPlaneOnScreen();
+
     // ---------------- INPUT ----------------
     window.addEventListener("keydown", (e) => {
       if (["ArrowUp","ArrowDown"," "].includes(e.key)) e.preventDefault();
@@ -518,6 +635,39 @@ travell
 
     window.addEventListener("keyup", (e) => {
       keys[e.key] = false;
+    });
+
+    function bindHoldButton(id, keyName, fireImmediately = false) {
+      const button = document.getElementById(id);
+
+      const press = (e) => {
+        e.preventDefault();
+        button.setPointerCapture?.(e.pointerId);
+        keys[keyName] = true;
+        button.classList.add("active");
+        if (fireImmediately) shootBullet();
+      };
+
+      const release = (e) => {
+        e.preventDefault();
+        keys[keyName] = false;
+        button.classList.remove("active");
+      };
+
+      button.addEventListener("pointerdown", press);
+      button.addEventListener("pointerup", release);
+      button.addEventListener("pointercancel", release);
+      button.addEventListener("lostpointercapture", release);
+      button.addEventListener("contextmenu", e => e.preventDefault());
+    }
+
+    bindHoldButton("touch-up", "ArrowUp");
+    bindHoldButton("touch-down", "ArrowDown");
+    bindHoldButton("touch-shoot", " ", true);
+
+    window.addEventListener("blur", () => {
+      keys = {};
+      document.querySelectorAll(".touch-btn").forEach(button => button.classList.remove("active"));
     });
 
     document.getElementById("start-btn").addEventListener("click", () => {
@@ -538,6 +688,9 @@ travell
       lastTime = performance.now();
       lastWordSpawn = 0;
       gameRunning = true;
+      document.body.classList.add("game-active");
+      plane.y = Math.max(60, (canvasHeight - plane.height) / 2);
+      keepPlaneOnScreen();
 
       bgMusic.currentTime = 0;
       bgMusic.play().catch(() => {
@@ -552,6 +705,8 @@ travell
 
     function endGame() {
       gameRunning = false;
+      document.body.classList.remove("game-active");
+      keys = {};
       bgMusic.pause();
       finalScore.textContent = "Your score: " + score;
       gameoverScreen.style.display = "flex";
@@ -610,10 +765,7 @@ travell
       if (keys["ArrowUp"])   plane.y -= plane.speed;
       if (keys["ArrowDown"]) plane.y += plane.speed;
 
-      if (plane.y < 50) plane.y = 50;
-      if (plane.y + plane.height > canvasHeight - 30) {
-        plane.y = canvasHeight - 30 - plane.height;
-      }
+      keepPlaneOnScreen();
 
       if (keys[" "]) {
         shootBullet();
@@ -639,7 +791,9 @@ travell
     function spawnWord() {
       const data = WORDS[Math.floor(Math.random() * WORDS.length)];
 
-      const y = 80 + Math.random() * (canvasHeight - 160);
+      const bottomSpace = isTouchDevice() ? Math.min(105, canvasHeight * 0.22) : 30;
+      const playableHeight = Math.max(60, canvasHeight - 80 - bottomSpace - 50);
+      const y = 80 + Math.random() * playableHeight;
 
       const colors = [
         "#f28b82","#fbbc04","#34a853","#4285f4",
@@ -755,7 +909,8 @@ travell
     }
 
     function drawWords() {
-      ctx.font = "bold 26px Arial";
+      const fontSize = canvasWidth < 700 ? 20 : 26;
+      ctx.font = `bold ${fontSize}px Arial`;
       ctx.textBaseline = "middle";
 
       words.forEach(w => {
