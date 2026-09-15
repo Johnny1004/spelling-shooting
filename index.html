@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Word Shooting Plane Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    #gameCanvas {
+      display: block;
+    }
+
+    #ui-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+    }
+
+    .top-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #ffffff;
+      font-weight: bold;
+      text-shadow: 2px 2px 3px rgba(0,0,0,0.7);
+      pointer-events: none;
+    }
+
+    .score {
+      font-size: 32px;
+    }
+
+    .lives {
+      display: flex;
+      gap: 8px;
+    }
+
+    .life-icon {
+      width: 40px;
+      height: 30px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    #start-screen,
+    #gameover-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      flex-direction: column;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    #gameover-screen { display: none; }
+
+    .btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      border: none;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #ffcc00;
+      color: #333;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+
+    .btn:hover { filter: brightness(1.1); }
+  </style>
+</head>
+<body>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="ui-overlay">
+    <div class="top-bar">
+      <div class="lives" id="lives-container"></div>
+      <div class="score">SCORE: <span id="score-text">0</span></div>
+    </div>
+
+    <div id="start-screen">
+      <h1>Word Shooting Plane</h1>
+      <p>Use ↑ and ↓ to move. Press SPACE to shoot.</p>
+      <button class="btn" id="start-btn">START</button>
+    </div>
+
+    <div id="gameover-screen">
+      <h1>GAME OVER</h1>
+      <div id="final-score"></div>
+      <button class="btn" id="restart-btn">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script>
+    // ---------------- CONFIG ----------------
+    const INITIAL_LIVES = 3;
+    const BULLET_SPEED = 10;
+
+    // 🔥 CHANGE THIS NUMBER TO ADJUST HOW FAST WORDS MOVE (leftwards)
+    const WORD_SPEED = 4.0; // try 2 (slower) or 3 (faster)
+
+    const WORD_SPAWN_INTERVAL = 1500; // ms between word spawns
+    const SHOOT_COOLDOWN = 180;       // ms between shots
+
+    // Plane size (Option B from our discussion)
+    const PLANE_WIDTH = 180;
+    const PLANE_HEIGHT = 120;
+
+    // While testing: use rectangle placeholder instead of plane image
+    const USE_PLANE_IMAGE = true;
+
+    // ---------------- CANVAS ----------------
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let canvasWidth = window.innerWidth;
+    let canvasHeight = window.innerHeight;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    window.addEventListener("resize", () => {
+      canvasWidth = window.innerWidth;
+      canvasHeight = window.innerHeight;
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+    });
+
+    // ---------------- WORD LISTS ----------------
+    // We'll store them as raw text and split by line
+
+    const RAW_CORRECT_WORDS = `
+phone
+tomato
+computer
+pencil
+eraser
+notebook
+ruler
+teacher
+student
+marker
+backpack
+desk
+chair
+classroom
+board
+lesson
+homework
+subject
+English
+science
+math
+recess
+library
+paper
+folder
+book
+project
+bread
+butter
+cheese
+potato
+chicken
+rice
+pasta
+apple
+banana
+orange
+cookie
+candy
+water
+juice
+milk
+coffee
+tea
+breakfast
+lunch
+dinner
+salad
+soup
+sandwich
+yogurt
+mother
+father
+sister
+brother
+aunt
+uncle
+cousin
+grandmother
+grandfather
+baby
+friend
+neighbor
+boy
+girl
+woman
+man
+people
+family
+parents
+children
+teenager
+husband
+wife
+worker
+house
+apartment
+kitchen
+bedroom
+bathroom
+living
+door
+window
+table
+sofa
+lamp
+bed
+pillow
+blanket
+shower
+mirror
+closet
+floor
+wall
+garden
+garage
+stairs
+roof
+balcony
+dog
+cat
+bird
+fish
+rabbit
+horse
+cow
+sheep
+goat
+pig
+chicken
+duck
+frog
+turtle
+snake
+lion
+tiger
+bear
+monkey
+elephant
+giraffe
+zebra
+mouse
+fox
+wolf
+school
+park
+store
+supermarket
+hospital
+bank
+restaurant
+bakery
+airport
+station
+street
+avenue
+city
+town
+village
+mall
+theater
+church
+museum
+hotel
+beach
+bridge
+market
+playground
+walk
+run
+jump
+swim
+study
+read
+write
+speak
+listen
+watch
+cook
+clean
+open
+close
+start
+finish
+help
+play
+travel
+visit
+eat
+drink
+sleep
+learn
+teach
+camera
+laptop
+charger
+keys
+wallet
+glasses
+umbrella
+bicycle
+helmet
+ball
+toy
+bag
+clock
+watch
+map
+radio
+remote
+toothbrush
+toothpaste
+shampoo
+soap
+towel
+brush
+comb
+`;
+
+    const RAW_INCORRECT_WORDS = `
+daugter
+bicicle
+kichen
+becouse
+tommato
+frend
+fammily
+studing
+waterr
+sandwitch
+livng
+soofa
+floar
+windo
+brocoli
+potatto
+carrott
+brekfast
+lunsh
+dinerr
+choclate
+biskit
+yogurth
+juece
+milck
+teatcher
+studdent
+clasroom
+papper
+rulerr
+pencel
+eracer
+backpak
+leson
+suject
+libary
+computerr
+cheez
+bananna
+applle
+smothie
+juce
+cofee
+werk
+housse
+aparment
+badroom
+batroom
+lvinroom
+tabl
+chare
+lampo
+miror
+blanquet
+shouer
+closett
+garaje
+staires
+rof
+gardenn
+dogg
+catt
+elefant
+giraf
+monkye
+zembra
+wolff
+tigger
+lyon
+rabit
+horsse
+shep
+ducc
+froog
+turtlee
+snak
+beear
+markett
+shooping
+resturant
+hospittal
+supermarkett
+parck
+airpot
+streeet
+churh
+musseum
+beeahc
+hotle
+playgrond
+brige
+lern
+wach
+openn
+cloze
+slep
+halp
+travell
+`;
+
+    const CORRECT_WORDS = RAW_CORRECT_WORDS
+      .trim()
+      .split("\n")
+      .map(w => w.trim())
+      .filter(w => w.length > 0);
+
+    const INCORRECT_WORDS = RAW_INCORRECT_WORDS
+      .trim()
+      .split("\n")
+      .map(w => w.trim())
+      .filter(w => w.length > 0);
+
+    // Combine into one list of objects: { text, isCorrect }
+    const WORDS = [
+      ...CORRECT_WORDS.map(text => ({ text, isCorrect: true })),
+      ...INCORRECT_WORDS.map(text => ({ text, isCorrect: false }))
+    ];
+
+    console.log("Correct words:", CORRECT_WORDS.length);
+    console.log("Incorrect words:", INCORRECT_WORDS.length);
+
+    // ---------------- ASSETS ----------------
+    const planeImg = new Image();
+    planeImg.src = "plane.png";
+
+    const lifeImg = new Image();
+    lifeImg.src = "plane.png";
+
+    const bgImg = new Image();
+    bgImg.src = "bg-image.png";
+
+    const shootSound = new Audio("shooting.mp3");
+    const coinSound  = new Audio("coin.mp3");   // good hit (incorrect word)
+    const wrongSound = new Audio("wrong.mp3");  // bad hit (correct word)
+    const bgMusic    = new Audio("bg-music.mp3");
+    bgMusic.loop = true;
+    bgMusic.volume = 0.4;
+
+    // ---------------- GAME STATE ----------------
+    let lives;
+    let score;
+    let bullets;
+    let words;
+    let keys = {};
+    let lastTime = 0;
+    let lastWordSpawn = 0;
+    let gameRunning = false;
+
+    const scoreText = document.getElementById("score-text");
+    const livesContainer = document.getElementById("lives-container");
+    const startScreen = document.getElementById("start-screen");
+    const gameoverScreen = document.getElementById("gameover-screen");
+    const finalScore = document.getElementById("final-score");
+
+    const plane = {
+      x: 120,
+      y: canvasHeight / 2,
+      width: PLANE_WIDTH,
+      height: PLANE_HEIGHT,
+      speed: 6
+    };
+
+    // ---------------- INPUT ----------------
+    window.addEventListener("keydown", (e) => {
+      if (["ArrowUp","ArrowDown"," "].includes(e.key)) e.preventDefault();
+      keys[e.key] = true;
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
+    });
+
+    document.getElementById("start-btn").addEventListener("click", () => {
+      startScreen.style.display = "none";
+      startGame();
+    });
+
+    document.getElementById("restart-btn").addEventListener("click", () => {
+      restartGame();
+    });
+
+    // ---------------- GAME CONTROL ----------------
+    function startGame() {
+      lives = INITIAL_LIVES;
+      score = 0;
+      bullets = [];
+      words = [];
+      lastTime = performance.now();
+      lastWordSpawn = 0;
+      gameRunning = true;
+
+      bgMusic.currentTime = 0;
+      bgMusic.play().catch(() => {
+        // Some browsers block autoplay; no problem, game still runs.
+      });
+
+      updateLivesUI();
+      scoreText.textContent = score;
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() {
+      gameRunning = false;
+      bgMusic.pause();
+      finalScore.textContent = "Your score: " + score;
+      gameoverScreen.style.display = "flex";
+    }
+
+    function restartGame() {
+      gameoverScreen.style.display = "none";
+      startGame();
+    }
+
+    // ---------------- UI ----------------
+    function updateLivesUI() {
+      livesContainer.innerHTML = "";
+      for (let i = 0; i < lives; i++) {
+        const icon = document.createElement("div");
+        icon.className = "life-icon";
+        icon.style.backgroundImage = "url('plane.png')";
+        livesContainer.appendChild(icon);
+      }
+    }
+
+    // ---------------- GAME LOOP ----------------
+    function gameLoop(timestamp) {
+      if (!gameRunning) return;
+
+      const delta = timestamp - lastTime;
+      lastTime = timestamp;
+
+      // Background
+      drawBackground();
+
+      handleInput();
+      updateBullets();
+      updateWords();
+      checkCollisions();
+      drawPlane();
+      drawBullets();
+      drawWords();
+
+      // Spawn new words
+      if (timestamp - lastWordSpawn > WORD_SPAWN_INTERVAL) {
+        spawnWord();
+        lastWordSpawn = timestamp;
+      }
+
+      if (lives <= 0) {
+        endGame();
+        return;
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ---------------- GAME LOGIC ----------------
+    function handleInput() {
+      if (keys["ArrowUp"])   plane.y -= plane.speed;
+      if (keys["ArrowDown"]) plane.y += plane.speed;
+
+      if (plane.y < 50) plane.y = 50;
+      if (plane.y + plane.height > canvasHeight - 30) {
+        plane.y = canvasHeight - 30 - plane.height;
+      }
+
+      if (keys[" "]) {
+        shootBullet();
+      }
+    }
+
+    let lastShotTime = 0;
+    function shootBullet() {
+      const now = performance.now();
+      if (now - lastShotTime < SHOOT_COOLDOWN) return;
+      lastShotTime = now;
+
+      bullets.push({
+        x: plane.x + plane.width - 10,
+        y: plane.y + plane.height / 2,
+        radius: 8
+      });
+
+      shootSound.currentTime = 0;
+      shootSound.play().catch(() => {});
+    }
+
+    function spawnWord() {
+      const data = WORDS[Math.floor(Math.random() * WORDS.length)];
+
+      const y = 80 + Math.random() * (canvasHeight - 160);
+
+      const colors = [
+        "#f28b82","#fbbc04","#34a853","#4285f4",
+        "#a142f4","#f441b1","#00acc1","#ff7043"
+      ];
+
+      words.push({
+        x: canvasWidth + 50,
+        y: y,
+        width: 160,
+        height: 50,
+        text: data.text,
+        isCorrect: data.isCorrect,
+        bgColor: colors[Math.floor(Math.random()*colors.length)]
+      });
+    }
+
+    function updateBullets() {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        bullets[i].x += BULLET_SPEED;
+        if (bullets[i].x > canvasWidth + 20) {
+          bullets.splice(i, 1);
+        }
+      }
+    }
+
+    function updateWords() {
+      for (let i = words.length - 1; i >= 0; i--) {
+        words[i].x -= WORD_SPEED;
+        if (words[i].x + words[i].width < 0) {
+          // Word leaves the screen, no penalty
+          words.splice(i, 1);
+        }
+      }
+    }
+
+    // ---------------- COLLISIONS ----------------
+    function checkCollisions() {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+
+        for (let j = words.length - 1; j >= 0; j--) {
+          const w = words[j];
+
+          if (circleRectCollision(b, w)) {
+            // Remove bullet
+            bullets.splice(i, 1);
+
+            if (w.isCorrect) {
+              // Hit a correct word (BAD) → lose 1 life
+              lives--;
+              updateLivesUI();
+              wrongSound.currentTime = 0;
+              wrongSound.play().catch(() => {});
+            } else {
+              // Hit an incorrect/misspelled word (GOOD) → +100 points
+              score += 100;
+              scoreText.textContent = score;
+              coinSound.currentTime = 0;
+              coinSound.play().catch(() => {});
+            }
+
+            // Remove the word
+            words.splice(j, 1);
+            break;
+          }
+        }
+      }
+    }
+
+    function circleRectCollision(circle, rect) {
+      const distX = Math.abs(circle.x - rect.x - rect.width/2);
+      const distY = Math.abs(circle.y - rect.y - rect.height/2);
+
+      if (distX > (rect.width/2 + circle.radius)) return false;
+      if (distY > (rect.height/2 + circle.radius)) return false;
+
+      if (distX <= (rect.width/2)) return true;
+      if (distY <= (rect.height/2)) return true;
+
+      const dx = distX - rect.width/2;
+      const dy = distY - rect.height/2;
+      return (dx*dx + dy*dy <= circle.radius * circle.radius);
+    }
+
+    // ---------------- DRAW ----------------
+    function drawBackground() {
+      if (bgImg.complete && bgImg.naturalWidth !== 0) {
+        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
+      } else {
+        ctx.fillStyle = "#87ceeb";
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      }
+    }
+
+    function drawPlane() {
+      if (USE_PLANE_IMAGE && planeImg.complete && planeImg.naturalWidth !== 0) {
+        ctx.drawImage(planeImg, plane.x, plane.y, plane.width, plane.height);
+      } else {
+        // Rectangle placeholder while testing
+        ctx.fillStyle = "red";
+        ctx.fillRect(plane.x, plane.y, plane.width, plane.height);
+      }
+    }
+
+    function drawBullets() {
+      ctx.fillStyle = "black";
+      bullets.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawWords() {
+      ctx.font = "bold 26px Arial";
+      ctx.textBaseline = "middle";
+
+      words.forEach(w => {
+        const padding = 20;
+        const textWidth = ctx.measureText(w.text).width;
+        w.width = textWidth + padding * 2;
+
+        const radius = 25;
+        const x = w.x;
+        const y = w.y;
+
+        ctx.fillStyle = w.bgColor;
+        ctx.beginPath();
+        ctx.moveTo(x+radius, y);
+        ctx.lineTo(x+w.width-radius, y);
+        ctx.quadraticCurveTo(x+w.width, y, x+w.width, y+radius);
+        ctx.lineTo(x+w.width, y+w.height-radius);
+        ctx.quadraticCurveTo(x+w.width, y+w.height, x+w.width-radius, y+w.height);
+        ctx.lineTo(x+radius, y+w.height);
+        ctx.quadraticCurveTo(x, y+w.height, x, y+w.height-radius);
+        ctx.lineTo(x, y+radius);
+        ctx.quadraticCurveTo(x, y, x+radius, y);
+        ctx.fill();
+
+        ctx.fillStyle = "white";
+        ctx.fillText(w.text, x + padding, y + w.height/2 + 2);
+      });
+    }
+
+  </script>
+</body>
+</html>
